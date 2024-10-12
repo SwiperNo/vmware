@@ -1,0 +1,94 @@
+---
+- name: Deploy Linux servers for Vmware
+  hosts: all
+  gather_facts: false
+  vars:
+    vcenter_hostname: vcenter.thouse.lab
+    vcenter_username : "kyle@thouse.lab"
+    vcenter_password : "Cora0410@1991"
+    datacenter: THOUSE
+    template: "RHCE-Template"
+
+
+  tasks:
+
+
+    - name: Review build
+      ansible.builtin.debug:
+        var: disk_2_gb
+
+    - name: Clone a virtual machine from Linux template and customize
+      community.vmware.vmware_guest:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter }}"
+        state: poweredon
+        folder: "{{ folder }}"
+        template: "{{ template }}"
+        name: "{{ vm_name }}"
+        cluster: "{{ cluster }}"
+        disk: "{{ [
+                  { 'size_gb': disk_size_gb, 'type': 'thin', 'datastore': datastore }
+               ] + 
+               ([{ 'size_gb': disk_2_gb, 'type': 'thin', 'datastore': datastore }] 
+                if disk_2_gb is defined else []) }}"
+        hardware:
+          memory_mb: "{{ ram_size_mb }}"
+          num_cpus: "{{ cpu_count }}"
+          scsi: paravirtual
+        networks:
+          - name: "{{ network }}"
+            device_type: vmxnet3
+        wait_for_ip_address: false
+        customization:
+          script_text: |
+            #!/bin/bash
+            touch /tmp/touch-from-playbook
+
+            # Modify user swipe and set password
+            useradd swipe -m -s /bin/bash
+            echo "Cora0410@1991" | passwd --stdin swipe
+            usermod -aG wheel swipe
+            echo "swipe ALL=(ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/swipe
+            chmod 440 /etc/sudoers.d/swipe
+            cat /etc/sudoers.d/swipe > /tmp/swiper-user-created
+            
+
+
+            # Set up SSH key for user swipe
+            mkdir -p /home/swipe/.ssh
+            echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDcIuwW+n51rrXIA378S3w+q27e6QoSrIWTvxUxmupURdrnOpFJkvut31f21wR+bTagZwgL0c6qbLVc8X+tdIxBYLg/41DjGNt45yyxqaKf9gBUW6Wqjde9eyr37OvUDTfLCbZdQqtemvybgFU3xDEM53Fg0cZlhy3fSLhjBGXo/PCSX/tCfFPQUUhLUiYBYIvozSix9F71pXQ9g2mJA3Bry+Qcx/rGfaBUEJSDzYMiiGDbKHXfq81x3D+wEiI1kc2oZ/KUI5lRlqaf+rhRrR9v7A0e/W5WMbKMa39JnTzuKENZmCL2hT1rGzYgpdP3ewOHYAv/J1YUhEBR32RQB5lyAF8nbX6astGz1G1ZadvSLGCCUP39GExRjm7QAIQH5cjybmmYPKd+qcAUJlGeNIwxnVrAO7NRqKdS3cTh+vbaH69YZcuI/uWhn7ygAHIITP1uELwWlwzMmAmDWUG7ovi9rgmzwVmIQHkpzqU7hylel6fNm7/o/W+RcjRHCB26Pm0= swipe@fedora" > /home/swipe/.ssh/authorized_keys
+            chown -R swipe:swipe /home/swipe/.ssh
+            chmod 700 /home/swipe/.ssh
+            chmod 600 /home/swipe/.ssh/authorized_keys
+            touch /tmp/automation-ssh-key-created
+
+            touch /tmp/automation-swipe-complete
+        validate_certs: false
+      delegate_to: localhost
+      register: test_vm
+
+    - name: Review build
+      ansible.builtin.debug:
+        var: test_vm
+    
+    # - name: Delete the virtual machine
+    #   community.vmware.vmware_guest:
+    #     hostname: "{{ vcenter_hostname }}"
+    #     username: "{{ vcenter_username }}"
+    #     password: "{{ vcenter_password }}"
+    #     datacenter: "{{ datacenter }}"
+    #     state: absent
+    #     name: "{{ vm_name }}"
+    #     folder: "{{ folder }}"
+    #     cluster: "{{ cluster }}"
+    #     validate_certs: false
+    #     force: true
+    #   delegate_to: localhost
+    #   when: test_vm is succeeded
+    #   register: deleted_automation
+
+    - name: Print out deleted host vars
+      ansible.builtin.debug:
+        var: deleted_automation
